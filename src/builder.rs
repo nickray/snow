@@ -268,6 +268,17 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "chacha8poly")]
+    fn test_builder8() {
+        let _noise = Builder::new("Noise_NK_25519_ChaCha8Poly_SHA256".parse().unwrap())
+            .prologue(&[2, 2, 2, 2, 2, 2, 2, 2])
+            .local_private_key(&[0u8; 32])
+            .remote_public_key(&[0u8; 32])
+            .build_initiator()
+            .unwrap();
+    }
+
+    #[test]
     fn test_builder_keygen() {
         let builder = Builder::new("Noise_NN_25519_ChaChaPoly_SHA256".parse().unwrap());
         let key1 = builder.generate_keypair();

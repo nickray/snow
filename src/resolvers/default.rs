@@ -5,6 +5,8 @@ use chacha20poly1305::{
     aead::{AeadInPlace, NewAead},
     ChaCha20Poly1305,
 };
+#[cfg(feature = "chacha8poly")]
+use chacha20poly1305::ChaCha8Poly1305;
 use core::convert::TryInto;
 #[cfg(feature = "pqclean_kyber1024")]
 use pqcrypto_kyber::kyber1024;
@@ -56,6 +58,8 @@ impl CryptoResolver for DefaultResolver {
     fn resolve_cipher(&self, choice: &CipherChoice) -> Option<Box<dyn Cipher>> {
         match *choice {
             CipherChoice::ChaChaPoly => Some(Box::new(CipherChaChaPoly::default())),
+            #[cfg(feature = "chacha8poly")]
+            CipherChoice::ChaCha8Poly => Some(Box::new(CipherChaCha8Poly::default())),
             #[cfg(feature = "xchachapoly")]
             CipherChoice::XChaChaPoly => Some(Box::new(CipherXChaChaPoly::default())),
             CipherChoice::AESGCM => Some(Box::new(CipherAesGcm::default())),
@@ -83,9 +87,16 @@ struct CipherAesGcm {
     key: [u8; 32],
 }
 
-/// Wraps `chacha20_poly1305_aead`'s ChaCha20Poly1305 implementation.
+/// Wraps `RustCrypto`'s ChaCha8Poly1305 implementation.
 #[derive(Default)]
 struct CipherChaChaPoly {
+    key: [u8; 32],
+}
+
+/// Wraps `chacha20_poly1305_aead`'s ChaCha20Poly1305 implementation.
+#[cfg(feature = "chacha8poly")]
+#[derive(Default)]
+struct CipherChaCha8Poly {
     key: [u8; 32],
 }
 
@@ -257,6 +268,58 @@ impl Cipher for CipherChaChaPoly {
         copy_slices!(ciphertext[..message_len], out);
 
         ChaCha20Poly1305::new(&self.key.into())
+            .decrypt_in_place_detached(
+                &nonce_bytes.into(),
+                authtext,
+                &mut out[..message_len],
+                ciphertext[message_len..].into(),
+            )
+            .map_err(|_| Error::Decrypt)?;
+
+        Ok(message_len)
+    }
+}
+
+#[cfg(feature = "chacha8poly")]
+impl Cipher for CipherChaCha8Poly {
+    fn name(&self) -> &'static str {
+        "ChaCha8Poly"
+    }
+
+    fn set(&mut self, key: &[u8]) {
+        copy_slices!(key, &mut self.key);
+    }
+
+    fn encrypt(&self, nonce: u64, authtext: &[u8], plaintext: &[u8], out: &mut [u8]) -> usize {
+        let mut nonce_bytes = [0u8; 12];
+        copy_slices!(nonce.to_le_bytes(), &mut nonce_bytes[4..]);
+
+        copy_slices!(plaintext, out);
+
+        let tag = ChaCha8Poly1305::new(&self.key.into())
+            .encrypt_in_place_detached(&nonce_bytes.into(), authtext, &mut out[0..plaintext.len()])
+            .unwrap();
+
+        copy_slices!(tag, &mut out[plaintext.len()..]);
+
+        plaintext.len() + tag.len()
+    }
+
+    fn decrypt(
+        &self,
+        nonce: u64,
+        authtext: &[u8],
+        ciphertext: &[u8],
+        out: &mut [u8],
+    ) -> Result<usize, Error> {
+        let mut nonce_bytes = [0u8; 12];
+        copy_slices!(nonce.to_le_bytes(), &mut nonce_bytes[4..]);
+
+        let message_len = ciphertext.len() - TAGLEN;
+
+        copy_slices!(ciphertext[..message_len], out);
+
+        ChaCha8Poly1305::new(&self.key.into())
             .decrypt_in_place_detached(
                 &nonce_bytes.into(),
                 authtext,

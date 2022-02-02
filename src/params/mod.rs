@@ -57,6 +57,8 @@ impl FromStr for DHChoice {
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum CipherChoice {
     ChaChaPoly,
+    #[cfg(feature = "chacha8poly")]
+    ChaCha8Poly,
     #[cfg(feature = "xchachapoly")]
     XChaChaPoly,
     AESGCM,
@@ -69,6 +71,8 @@ impl FromStr for CipherChoice {
         use self::CipherChoice::*;
         match s {
             "ChaChaPoly" => Ok(ChaChaPoly),
+            #[cfg(feature = "chacha8poly")]
+            "ChaCha8Poly" => Ok(ChaCha8Poly),
             #[cfg(feature = "xchachapoly")]
             "XChaChaPoly" => Ok(XChaChaPoly),
             "AESGCM" => Ok(AESGCM),
